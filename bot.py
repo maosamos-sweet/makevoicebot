@@ -1,5 +1,7 @@
 import os
 import subprocess
+from threading import Thread
+from flask import Flask
 from telegram import Update
 from telegram.ext import Application, MessageHandler, ContextTypes, filters
 
@@ -12,7 +14,6 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     ogg_file = "speech.ogg"
 
     try:
-        # Generate TTS
         subprocess.run([
             "edge-tts",
             "--voice", "km-KH-PisethNeural",
@@ -20,7 +21,6 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
             "--write-media", mp3_file
         ], check=True)
 
-        # Convert to Telegram voice format
         subprocess.run([
             "ffmpeg",
             "-y",
@@ -32,10 +32,8 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
             ogg_file
         ], check=True)
 
-        # Send voice message
-        await update.message.reply_voice(
-            voice=open(ogg_file, "rb")
-        )
+        with open(ogg_file, "rb") as voice:
+            await update.message.reply_voice(voice=voice)
 
     except Exception as e:
         await update.message.reply_text(f"Error: {e}")
@@ -45,7 +43,8 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
             if os.path.exists(f):
                 os.remove(f)
 
-def main():
+# Telegram Bot
+def run_bot():
     app = Application.builder().token(BOT_TOKEN).build()
 
     app.add_handler(
@@ -55,5 +54,17 @@ def main():
     print("Bot started...")
     app.run_polling()
 
+# Web Server for Render
+web_app = Flask(__name__)
+
+@web_app.route("/")
+def home():
+    return "Khmer TTS Bot Running"
+
+def run_web():
+    port = int(os.environ.get("PORT", 10000))
+    web_app.run(host="0.0.0.0", port=port)
+
 if __name__ == "__main__":
-    main()
+    Thread(target=run_web).start()
+    run_bot()
